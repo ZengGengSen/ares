@@ -65,6 +65,10 @@ ifneq ($(filter $(cores),pce),)
   include $(ares.path)/pce/GNUmakefile
 endif
 
+ifneq ($(filter $(cores),pgm),)
+	include $(ares.path)/pgm/GNUmakefile
+endif
+
 ifneq ($(filter $(cores),msx),)
   include $(ares.path)/msx/GNUmakefile
 endif
