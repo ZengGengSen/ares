@@ -79,7 +79,7 @@ struct RSP : Thread, Memory::RCP<RSP> {
 
   auto instruction() -> void;
   auto instructionPrologue(u32 instruction) -> void;
-  auto instructionEpilogue(u32 clocks) -> s32;
+  template<bool Recompiled> auto instructionEpilogue(u32 clocks) -> s32;
 
   auto power(bool reset) -> void;
 
@@ -90,6 +90,7 @@ struct RSP : Thread, Memory::RCP<RSP> {
       Branch    = 1 << 2,
       Vector    = 1 << 3,
       VNopGroup = 1 << 4,  //dual issue conflicts with VNOP
+      Bypass    = 1 << 5,
     };
 
     u32 flags;
@@ -102,6 +103,7 @@ struct RSP : Thread, Memory::RCP<RSP> {
     auto store() const -> bool { return flags & Store; }
     auto branch() const -> bool { return flags & Branch; }
     auto vector() const -> bool { return flags & Vector; }
+    auto bypass() const -> bool { return flags & Bypass; }
   };
 
   static auto canDualIssue(const OpInfo& op0, const OpInfo& op1) -> bool {
@@ -169,7 +171,7 @@ struct RSP : Thread, Memory::RCP<RSP> {
 
     auto issue(const OpInfo& op) -> void {
       current.rRead |= op.r.use;
-      current.rWrite |= op.r.def & ~1;  //zero register can't be written
+      if(!op.bypass()) current.rWrite |= op.r.def & ~1;  //zero register can't be written
       current.vRead |= op.v.use;
       current.vWrite |= op.v.def;
       current.load |= op.load();
@@ -206,7 +208,9 @@ struct RSP : Thread, Memory::RCP<RSP> {
   } pipeline;
 
   //dma.cpp
-  auto dmaTransferStart() -> void;
+  auto dmaQueue(u32 clocks, Thread& thread) -> void;
+  auto dmaStep(u32 clocks) -> void;
+  auto dmaTransferStart(Thread& thread) -> void;
   auto dmaTransferStep() -> void;
 
   //io.cpp
@@ -238,6 +242,8 @@ struct RSP : Thread, Memory::RCP<RSP> {
 
       auto any() -> n1 { return read | write; }
     } busy, full;
+
+    s64 clock;
   } dma;
 
   struct Status : Memory::RCP<Status> {
@@ -332,6 +338,7 @@ struct RSP : Thread, Memory::RCP<RSP> {
   auto SW(cr32& rt, cr32& rs, s16 imm) -> void;
   auto XOR(r32& rd, cr32& rs, cr32& rt) -> void;
   auto XORI(r32& rt, cr32& rs, u16 imm) -> void;
+  auto SPECIAL_INVALID(r32& rd, cr32& rt, cr32& rs) -> void;
 
   //scc.cpp: System Control Coprocessor
   auto MFC0(r32& rt, u8 rd) -> void;
@@ -561,6 +568,7 @@ struct RSP : Thread, Memory::RCP<RSP> {
       return s <= e ? smask & emask : smask | emask;
     }
 
+    bool enabled = false;
     bool callInstructionPrologue = false;
     Pipeline pipeline;
     bump_allocator allocator;

@@ -103,6 +103,7 @@ auto Settings::process(bool load) -> void {
   bind(boolean, "General/RunAhead", general.runAhead);
   bind(boolean, "General/AutoSaveMemory", general.autoSaveMemory);
   bind(boolean, "General/HomebrewMode", general.homebrewMode);
+  bind(boolean, "General/ForceInterpreter", general.forceInterpreter);
 
   bind(natural, "Rewind/Length", rewind.length);
   bind(natural, "Rewind/Frequency", rewind.frequency);
@@ -122,6 +123,8 @@ auto Settings::process(bool load) -> void {
   bind(boolean, "DebugServer/UseIPv4", debugServer.useIPv4);
 
   bind(boolean, "Nintendo64/ExpansionPak", nintendo64.expansionPak);
+
+  bind(boolean, "MegaDrive/TMSS", megadrive.tmss);
 
   for(u32 index : range(9)) {
     string name = {"Recent/Game-", 1 + index};
@@ -222,7 +225,7 @@ SettingsWindow::SettingsWindow() {
 
   setDismissable();
   setTitle("Configuration");
-  setSize({700_sx, 405_sy});
+  setSize({700_sx, 425_sy});
   setAlignment({0.0, 1.0});
   setResizable(false);
 }

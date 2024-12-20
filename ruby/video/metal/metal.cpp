@@ -122,10 +122,14 @@ struct VideoMetal : VideoDriver, Metal {
   }
   
   auto isVRRSupported() -> bool {
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 120000
     if (@available(macOS 12.0, *)) {
       NSTimeInterval minInterval = view.window.screen.minimumRefreshInterval;
       NSTimeInterval maxInterval = view.window.screen.maximumRefreshInterval;
       _vrrIsSupported = minInterval != maxInterval;
+#else
+      _vrrIsSupported = false;
+#endif
       return _vrrIsSupported;
     } else {
       return false;
@@ -139,6 +143,7 @@ struct VideoMetal : VideoDriver, Metal {
       CFTimeInterval refreshRate = CGDisplayModeGetRefreshRate(displayMode);
       _presentInterval = (1.0 / refreshRate);
     } else {
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 120000
       if (@available(macOS 12.0, *)) {
         CFTimeInterval minimumInterval = view.window.screen.minimumRefreshInterval;
         if (_refreshRateHint != 0) {
@@ -149,6 +154,7 @@ struct VideoMetal : VideoDriver, Metal {
           _presentInterval = minimumInterval;
         }
       }
+#endif
     }
   }
 
@@ -162,13 +168,15 @@ struct VideoMetal : VideoDriver, Metal {
     }
     
     if(file::exists(pathname)) {
-      if (_libra.preset_create(pathname.data(), &_preset) != NULL) {
+      if (auto error = _libra.preset_create(pathname.data(), &_preset)) {
         print(string{"Metal: Failed to load shader: ", pathname, "\n"});
+        _libra.error_print(error);
         return false;
       }
       
-      if (_libra.mtl_filter_chain_create(&_preset, _commandQueue, nil, &_filterChain) != NULL) {
+      if (auto error = _libra.mtl_filter_chain_create(&_preset, _commandQueue, nil, &_filterChain)) {
         print(string{"Metal: Failed to create filter chain for: ", pathname, "\n"});
+        _libra.error_print(error);
         return false;
       };
     } else {
@@ -280,11 +288,6 @@ struct VideoMetal : VideoDriver, Metal {
     
     _viewportSize.x = width;
     _viewportSize.y = height;
-
-    _libraViewport.width = (uint32_t) width;
-    _libraViewport.height = (uint32_t) height;
-    _libraViewport.x = 0;
-    _libraViewport.y = 0;
     
     _outputX = (_viewWidth - width) / 2;
     _outputY = (_viewHeight - height) / 2;
@@ -341,8 +344,8 @@ private:
     /// consisting of the pixel buffer from the emulator, onto a texture the same size as our eventual output,
     /// `_renderTargetTexture`. Then it calls into librashader, which performs postprocessing onto the same
     /// output texture. Then for the second render pass here, we composite the output texture within ares's viewport.
-    /// We need this last pass because librashader expects the viewport to be the same size as the output texture,
-    /// which is not the case for ares.
+    /// We defer this second pass because it is performed directly onto the drawable texture, which we want to delay
+    /// acquiring for as long as possible.
     
     dispatch_semaphore_wait(_semaphore, DISPATCH_TIME_FOREVER);
 
@@ -382,7 +385,7 @@ private:
         [renderEncoder endEncoding];
         
         if (_filterChain) {
-          _libra.mtl_filter_chain_frame(&_filterChain, commandBuffer, frameCount, sourceTexture, _libraViewport, _renderTargetTexture, nil, nil);
+          _libra.mtl_filter_chain_frame(&_filterChain, commandBuffer, frameCount, sourceTexture, _renderTargetTexture, nil, nil, nil);
         }
         
         //this call will block the current thread/queue if a drawable is not yet available

@@ -5,8 +5,6 @@ auto CPU::serialize(serializer& s) -> void {
   s(iwram);
   s(ewram);
 
-  s(dmabus.data);
-
   for(auto& dma : this->dma) {
     s(dma.id);
     s(dma.active);
@@ -31,6 +29,7 @@ auto CPU::serialize(serializer& s) -> void {
     s(dma.latch.target.mask);
     s(dma.latch.length.data);
     s(dma.latch.length.mask);
+    s(dma.latch.data);
   }
 
   for(auto& timer : this->timer) {
@@ -53,7 +52,8 @@ auto CPU::serialize(serializer& s) -> void {
   s(serial.transferEnableReceive);
   s(serial.transferEnableSend);
   s(serial.startBit);
-  s(serial.transferLength);
+  s(serial.uartFlags);
+  s(serial.mode);
   s(serial.irqEnable);
   for(auto& value : serial.data) s(value);
   s(serial.data8);
@@ -61,6 +61,7 @@ auto CPU::serialize(serializer& s) -> void {
   s(keypad.enable);
   s(keypad.condition);
   for(auto& flag : keypad.flag) s(flag);
+  s(keypad.conditionMet);
 
   s(joybus.sc);
   s(joybus.sd);
@@ -82,9 +83,10 @@ auto CPU::serialize(serializer& s) -> void {
   s(joybus.sendFlag);
   s(joybus.generalFlag);
 
-  s(irq.ime);
-  s(irq.enable);
-  s(irq.flag);
+  for(auto& flag : irq.ime) s(flag);
+  s(irq.synchronizer);
+  for(auto& flag : irq.enable) s(flag);
+  for(auto& flag : irq.flag) s(flag);
 
   for(auto& flag : wait.nwait) s(flag);
   for(auto& flag : wait.swait) s(flag);
@@ -98,15 +100,21 @@ auto CPU::serialize(serializer& s) -> void {
   s(memory.ewramWait);
   s(memory.unknown2);
 
+  s(openBus.data);
+  s(openBus.iwramData);
+
   s(prefetch.slot);
   s(prefetch.addr);
   s(prefetch.load);
   s(prefetch.wait);
+  s(prefetch.stopped);
 
   s(context.clock);
   s(context.halted);
   s(context.stopped);
   s(context.booted);
+  s(context.dmaRan);
+  s(context.dmaRomAccess);
   s(context.dmaActive);
   s(context.timerLatched);
 }

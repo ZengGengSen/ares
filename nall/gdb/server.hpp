@@ -9,10 +9,29 @@ enum class Signal : u8 {
   HANGUP  = 1,
   INT     = 2,
   QUIT    = 3,
-  ILLEGAL = 4,
+  ILL     = 4,
   TRAP    = 5,
   ABORT   = 6,
+  EMT     = 7,
+  FPE     = 8,
+  KILL    = 9,
+  BUS     = 10,
   SEGV    = 11,
+  SYS     = 12,
+  PIPE    = 13,
+  ALRM    = 14,
+  TERM    = 15,
+  URG     = 16,
+  STOP    = 17,
+  TSTP    = 18,
+  CONT    = 19,
+  CHLD    = 20,
+  TTIN    = 21,
+  TTOU    = 22,
+  IO      = 23,
+  PROF    = 27,
+  WINCH   = 28,
+  LOST    = 29,
 };
 
 /**
@@ -48,7 +67,7 @@ class Server : public nall::TCPText::Server {
     struct {
       // Memory
       function<string(u64 address, u32 byteCount)> read{};
-      function<void(u64 address, u32 unitSize, u64 value)> write{};
+      function<void(u64 address, vector<u8> value)> write{};
       function<u64(u64 address)> normalizeAddress{};
 
       // Registers

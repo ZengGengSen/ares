@@ -25,13 +25,14 @@ auto CPU::Timer::stepLatch() -> void {
   }
 }
 
-inline auto CPU::Timer::run() -> void {
+inline auto CPU::Timer::reloadLatch() -> void {
   if(pending) {
+    period = reload;
     pending = false;
-    if(enable) period = reload;
-    return;
   }
+}
 
+inline auto CPU::Timer::run() -> void {
   if(!enable || cascade) return;
 
   static const u32 mask[] = {0, 63, 255, 1023};
@@ -42,7 +43,7 @@ auto CPU::Timer::step() -> void {
   if(++period == 0) {
     period = reload;
 
-    if(irq) cpu.irq.flag |= CPU::Interrupt::Timer0 << id;
+    if(irq) cpu.setInterruptFlag(CPU::Interrupt::Timer0 << id);
 
     if(apu.fifo[0].timer == id) cpu.runFIFO(0);
     if(apu.fifo[1].timer == id) cpu.runFIFO(1);

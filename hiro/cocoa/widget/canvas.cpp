@@ -1,6 +1,6 @@
 #if defined(Hiro_Canvas)
 
-@implementation CocoaCanvas : NSView
+@implementation CocoaCanvas
 
 -(id) initWith:(hiro::mCanvas&)canvasReference {
   if(self = [super initWithFrame:NSMakeRect(0, 0, 0, 0)]) {
@@ -11,7 +11,6 @@
     ];
     [self addTrackingArea:area];
   }
-  self.clipsToBounds = true;
   return self;
 }
 
@@ -116,7 +115,7 @@
     [NSMakeImage(fill) drawInRect:frame];
   } else {
     [NSMakeColor(canvas->state.color) set];
-    NSRectFill(dirtyRect);
+    NSRectFill(frame);
   }
 }
 

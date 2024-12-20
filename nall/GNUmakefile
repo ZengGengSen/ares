@@ -102,7 +102,7 @@ ifneq ($(filter cl,$(compiler)),)
 else
   machine_opt := $(if $(findstring clang,$(compiler)),-print-target-triple,-dumpmachine)
   machine_str := $(shell $(compiler) $(machine_opt))
-  ifneq ($(filter i686-%,$(machine_str)),)
+  ifneq ($(filter i386-% i486-% i586-% i686-%,$(machine_str)),)
     machine := x86
   else ifneq ($(filter amd64-% x86_64-%,$(machine_str)),)
     machine := amd64
@@ -310,8 +310,8 @@ endif
 
 # macos settings
 ifeq ($(platform),macos)
-  flags   += -mmacosx-version-min=10.9 -Wno-auto-var-id -Wno-deprecated-declarations -fobjc-arc
-  options += -lc++ -lobjc -mmacosx-version-min=10.9
+  flags   += -mmacosx-version-min=10.13 -Wno-auto-var-id -Wno-deprecated-declarations -fobjc-arc
+  options += -lc++ -lobjc -mmacosx-version-min=10.13
   # allow mprotect() on dynamic recompiler code blocks
   options += -Wl,-segprot,__DATA,rwx,rw
 endif
@@ -325,7 +325,6 @@ endif
 ifeq ($(platform),bsd)
   flags   += -I/usr/local/include
   options += -Wl,-rpath=/usr/local/lib
-  options += -Wl,-rpath=/usr/local/lib/gcc8
   options += -lstdc++ -lm
 endif
 
@@ -472,6 +471,7 @@ ifeq ($(platform),windows)
   prefix := $(subst $([space]),\$([space]),$(strip $(call strtr,$(LOCALAPPDATA),\,/)))
 else
   prefix := $(HOME)/.local
+  flags += -DARES_PREFIX="$(prefix)"
 endif
 
 # objects

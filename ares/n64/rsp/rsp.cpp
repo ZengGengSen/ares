@@ -31,18 +31,23 @@ auto RSP::unload() -> void {
 
 auto RSP::main() -> void {
   while(Thread::clock < 0) {
-    if(status.halted) return step(128);
-    instruction();
+    auto clock = Thread::clock;
+
+    if(status.halted) {
+      step(128);
+    } else {
+      instruction();
+    }
+
+    dmaStep(Thread::clock - clock);
   }
 }
 
 auto RSP::instruction() -> void {
-  if constexpr(Accuracy::RSP::Recompiler) {
+  if(Accuracy::RSP::Recompiler && recompiler.enabled) {
     auto block = recompiler.block(ipu.pc);
     block->execute(*this);
-  }
-
-  if constexpr(Accuracy::RSP::Interpreter) {
+  } else {
     u32 instruction = imem.read<Word>(ipu.pc);
     instructionPrologue(instruction);
     pipeline.begin();
@@ -55,7 +60,7 @@ auto RSP::instruction() -> void {
       OpInfo op1 = decoderEXECUTE(instruction);
 
       if(canDualIssue(op0, op1)) {
-        instructionEpilogue(0);
+        instructionEpilogue<0>(0);
         instructionPrologue(instruction);
         pipeline.issue(op1);
         interpreterEXECUTE();
@@ -63,7 +68,7 @@ auto RSP::instruction() -> void {
     }
 
     pipeline.end();
-    instructionEpilogue(0);
+    instructionEpilogue<0>(0);
   }
 
   //this handles all stepping for the interpreter
@@ -77,12 +82,15 @@ auto RSP::instructionPrologue(u32 instruction) -> void {
   debugger.instruction();
 }
 
+template<bool Recompiled>
 auto RSP::instructionEpilogue(u32 clocks) -> s32 {
-  if constexpr(Accuracy::RSP::Recompiler) {
+  if constexpr(Recompiled) {
     step(clocks);
-  }
 
-  ipu.r[0].u32 = 0;
+    assert(ipu.r[0].u32 == 0);
+  } else {
+    ipu.r[0].u32 = 0;
+  }
 
   switch(branch.state) {
   case Branch::Step: ipu.pc += 4; return status.halted;

@@ -7,7 +7,7 @@ struct CPU : Thread {
     //debugger.cpp
     auto load(Node::Object) -> void;
     auto unload() -> void;
-    auto instruction() -> void;
+    auto instruction(u64 address, u32 instruction) -> void;
     auto exception(u8 code) -> void;
     auto interrupt(u8 mask) -> void;
     auto nmi() -> void;
@@ -38,46 +38,50 @@ struct CPU : Thread {
   auto gdbPoll() -> void;
 
   auto instruction() -> void;
-  auto instructionPrologue(u32 instruction) -> void;
-  auto instructionEpilogue() -> s32;
+  auto instructionPrologue(u64 address, u32 instruction) -> void;
+  template<bool Recompiled> auto instructionEpilogue() -> void;
 
   auto power(bool reset) -> void;
 
   struct Pipeline {
-    u64 address;
-    u32 instruction;
+    CPU& self;
+    u64 pc     = 0;  //pc after current instruction
+    u64 nextpc = 0;  //pc after next instruction
+    u32 state  = 0;  //current branch state
+    u32 nstate = 0;  //next branch state
 
-    struct InstructionCache {
-    } ic;
+    enum : u32 {
+      EndBlock  = 1 << 0,
+      DelaySlot = 1 << 1,
+    };
 
-    struct RegisterFile {
-    } rf;
+    auto inDelaySlot() const -> bool { return state & DelaySlot; }
+    auto setPc(u64 address) -> void { self.ipu.pc = pc = address; nextpc = address + 4; state = nstate = 0; }
+    auto branch(u64 address) -> void { nextpc = address; nstate |= DelaySlot | EndBlock; }
+    auto noBranch() -> void { nstate |= DelaySlot; }
+    auto exception() -> void { state |= EndBlock; }
+    auto skip() -> void { pc += 4; nextpc = pc + 4; state |= EndBlock; }
+    auto begin() -> void {
+      nstate = 0;
+      pc = nextpc;
+      nextpc += 4;
+    }
+    auto end() -> void {
+      state = nstate;
+      self.ipu.pc = pc;
+    }
+  } pipeline{*this};
 
-    struct Execution {
-    } ex;
+  struct PhysAccess {
+    enum Direction : u32 { Read, Write };
 
-    struct DataCache {
-    } dc;
+    explicit operator bool() const { return found; }
 
-    struct WriteBack {
-    } wb;
-  } pipeline;
-
-  struct Branch {
-    enum : u32 { Step, Take, NotTaken, DelaySlotTaken, DelaySlotNotTaken, Exception, Discard };
-
-    auto inDelaySlot() const -> bool { return state == DelaySlotTaken || state == DelaySlotNotTaken; }
-    auto inDelaySlotTaken() const -> bool { return state == DelaySlotTaken; }
-    auto reset() -> void { state = Step; }
-    auto take(u64 address) -> void { state = Take; pc = address; }
-    auto notTaken() -> void { state = NotTaken; }
-    auto delaySlot(bool taken) -> void { state = taken ? DelaySlotTaken : DelaySlotNotTaken; }
-    auto exception() -> void { state = Exception; }
-    auto discard() -> void { state = Discard; }
-
-    u64 pc = 0;
-    u32 state = Step;
-  } branch;
+    bool found;   //this is a valid physical access
+    bool cache;   //access must go through cache
+    u32  paddr;   //physical address on 32-bit MIPS bus
+    u64  vaddr;   //virtual address used on the CPU (64-bit)
+  };
 
   //context.cpp
   struct Context {
@@ -108,29 +112,46 @@ struct CPU : Thread {
   struct InstructionCache {
     CPU& self;
     struct Line;
-    auto line(u32 vaddr) -> Line& { return lines[vaddr >> 5 & 0x1ff]; }
+    auto line(u64 vaddr) -> Line& { return lines[vaddr >> 5 & 0x1ff]; }
 
     //used by the recompiler to simulate instruction cache fetch timing
-    auto step(u32 vaddr, u32 address) -> void {
+    auto step(u64 vaddr, u32 paddr) -> void {
       auto& line = this->line(vaddr);
-      if(!line.hit(address)) {
+      if(!line.hit(paddr)) {
         self.step(48 * 2);
         line.valid = 1;
-        line.tag   = address & ~0x0000'0fff;
+        line.tag   = paddr & ~0x0000'0fff;
       } else {
         self.step(1 * 2);
       }
     }
 
-    //used by the interpreter to fully emulate the instruction cache
-    auto fetch(u32 vaddr, u32 address, CPU& cpu) -> u32 {
+    auto jitFetch(u64 vaddr, u32 paddr, CPU& cpu) -> void {
       auto& line = this->line(vaddr);
-      if(!line.hit(address)) {
-        line.fill(address, cpu);
-      } else {
-        cpu.step(1 * 2);
+      if(!line.hit(paddr)) {
+        line.fill(paddr, cpu);
       }
-      return line.read(address);
+    }
+
+    //used by the interpreter to fully emulate the instruction cache
+    auto fetch(u64 vaddr, u32 paddr, CPU& cpu) -> u32 {
+      auto& line = this->line(vaddr);
+      if(!line.hit(paddr)) {
+        line.fill(paddr, cpu);
+      }
+      return line.read(paddr);
+    }
+
+    auto coherent(u64 vaddr, u32 paddr) -> bool {
+      auto& line = this->line(vaddr);
+      if(!line.hit(paddr))
+        return true;
+      u32 ram[8];
+      self.busReadBurst<ICache>(paddr & ~0x0000'0fff | line.index, ram);
+      for (int i=0; i<8; i++)
+        if (ram[i] != line.words[i])
+          return false;
+      return true;
     }
 
     auto power(bool reset) -> void {
@@ -145,11 +166,11 @@ struct CPU : Thread {
 
     //16KB
     struct Line {
-      auto hit(u32 address) const -> bool { return valid && tag == (address & ~0x0000'0fff); }
-      auto fill(u32 address, CPU& cpu) -> void {
+      auto hit(u32 paddr) const -> bool { return valid && tag == (paddr & ~0x0000'0fff); }
+      auto fill(u32 paddr, CPU& cpu) -> void {
         cpu.step(48 * 2);
         valid = 1;
-        tag   = address & ~0x0000'0fff;
+        tag   = paddr & ~0x0000'0fff;
         cpu.busReadBurst<ICache>(tag | index, words);
       }
 
@@ -158,7 +179,7 @@ struct CPU : Thread {
         cpu.busWriteBurst<ICache>(tag | index, words);
       }
 
-      auto read(u32 address) const -> u32 { return words[address >> 2 & 7]; }
+      auto read(u32 paddr) const -> u32 { return words[paddr >> 2 & 7]; }
 
       bool valid;
       u32  tag;
@@ -170,20 +191,21 @@ struct CPU : Thread {
   //dcache.cpp
   struct DataCache {
     struct Line;
-    auto line(u32 vaddr) -> Line&;
-    template<u32 Size> auto read(u32 vaddr, u32 address) -> u64;
-    template<u32 Size> auto write(u32 vaddr, u32 address, u64 data) -> void;
+    auto line(u64 vaddr) -> Line&;
+    template<u32 Size> auto read(u64 vaddr, u32 paddr) -> u64;
+    template<u32 Size> auto write(u64 vaddr, u32 paddr, u64 data) -> void;
     auto power(bool reset) -> void;
 
-    auto readDebug(u32 vaddr, u32 address) -> u8;
+    auto readDebug(u64 vaddr, u32 paddr) -> u8;
+    auto writeDebug(u64 vaddr, u32 paddr, u8 value) -> void;
 
     //8KB
     struct Line {
-      auto hit(u32 address) const -> bool;
-      auto fill(u32 address) -> void;
+      auto hit(u32 paddr) const -> bool;
+      auto fill(u32 paddr) -> void;
       auto writeBack() -> void;
-      template<u32 Size> auto read(u32 address) const -> u64;
-      template<u32 Size> auto write(u32 address, u64 data) -> void;
+      template<u32 Size> auto read(u32 paddr) const -> u64;
+      template<u32 Size> auto write(u32 paddr, u64 data) -> void;
 
       bool valid;
       u16  dirty;
@@ -204,14 +226,6 @@ struct CPU : Thread {
     CPU& self;
     TLB(CPU& self) : self(self) {}
     static constexpr u32 Entries = 32;
-
-    struct Match {
-      explicit operator bool() const { return found; }
-
-      bool found;
-      bool cache;
-      u32  address;
-    };
 
     struct Entry {
       //scc-tlb.cpp
@@ -234,12 +248,11 @@ struct CPU : Thread {
     } entry[TLB::Entries];
 
     //tlb.cpp
-    auto load(u64 vaddr, bool noExceptions = false) -> Match;
-    auto load(u64 vaddr, const Entry& entry, bool noExceptions = false) -> maybe<Match>;
+    auto load(u64 vaddr, bool noExceptions = false) -> PhysAccess;
+    auto load(u64 vaddr, const Entry& entry, bool noExceptions = false) -> maybe<PhysAccess>;
     
-    auto loadFast(u64 vaddr) -> Match;
-    auto store(u64 vaddr) -> Match;
-    auto store(u64 vaddr, const Entry& entry) -> maybe<Match>;
+    auto store(u64 vaddr, bool noExceptions = false) -> PhysAccess;
+    auto store(u64 vaddr, const Entry& entry, bool noExceptions = false) -> maybe<PhysAccess>;
 
     struct TlbCache { ;
       static constexpr int entries = 4;
@@ -283,21 +296,30 @@ struct CPU : Thread {
   auto userSegment64(u64 vaddr) const -> Context::Segment;
 
   auto segment(u64 vaddr) -> Context::Segment;
-  auto devirtualize(u64 vaddr) -> maybe<u64>;
-  alwaysinline auto devirtualizeFast(u64 vaddr) -> u64;
+  template<u32 Dir, u32 Size> auto devirtualize(u64 vaddr, bool raiseAlignedError = true, bool raiseExceptions = true) -> PhysAccess;
   auto devirtualizeDebug(u64 vaddr) -> u64;
 
-  auto fetch(u64 vaddr) -> maybe<u32>;
+  auto fetch(PhysAccess access) -> maybe<u32>;
+  auto jitFetch(u64 vaddr, u32 addr) -> void {
+    icache.jitFetch(vaddr, addr, *this);
+  }
   template<u32 Size> auto busWrite(u32 address, u64 data) -> void;
   template<u32 Size> auto busRead(u32 address) -> u64;
   template<u32 Size> auto busWriteBurst(u32 address, u32 *data) -> void;
   template<u32 Size> auto busReadBurst(u32 address, u32 *data) -> void;
-  template<u32 Size> auto read(u64 vaddr) -> maybe<u64>;
-  template<u32 Size> auto write(u64 vaddr, u64 data, bool alignedError=true) -> bool;
+  template<u32 Size> auto read(PhysAccess access) -> maybe<u64>;
+  template<u32 Size> auto write(PhysAccess access, u64 data) -> bool;
+  template<u32 Size> auto read(u64 vaddr) -> maybe<u64> {
+    return read<Size>(devirtualize<Read, Size>(vaddr));
+  }
+  template<u32 Size> auto write(u64 vaddr, u64 data, bool alignedError = true) -> bool {
+    return write<Size>(devirtualize<Write, Size>(vaddr, alignedError), data);
+  }
   template<u32 Size> auto vaddrAlignedError(u64 vaddr, bool write) -> bool;
   auto addressException(u64 vaddr) -> void;
 
   auto readDebug(u64 vaddr) -> u8;
+  template <u32 Size> auto writeDebug(u64 vaddr, u64 data) -> bool;
 
   //serialization.cpp
   auto serialize(serializer&) -> void;
@@ -308,6 +330,7 @@ struct CPU : Thread {
     Exception(CPU& self) : self(self) {}
 
     auto trigger(u32 code, u32 coprocessor = 0, bool tlbMiss = 0) -> void;
+    auto reportGDBException(int code, u64 pc) -> void;
 
     auto interrupt() -> void;
     auto tlbModification() -> void;
@@ -837,12 +860,12 @@ struct CPU : Thread {
   auto COP2INVALID() -> void;
 
   //decoder.cpp
-  auto decoderEXECUTE() -> void;
-  auto decoderSPECIAL() -> void;
-  auto decoderREGIMM() -> void;
-  auto decoderSCC() -> void;
-  auto decoderFPU() -> void;
-  auto decoderCOP2() -> void;
+  auto decoderEXECUTE(u32 instruction) -> void;
+  auto decoderSPECIAL(u32 instruction) -> void;
+  auto decoderREGIMM(u32 instruction) -> void;
+  auto decoderSCC(u32 instruction) -> void;
+  auto decoderFPU(u32 instruction) -> void;
+  auto decoderCOP2(u32 instruction) -> void;
 
   auto COP3() -> void;
   auto INVALID() -> void;
@@ -897,10 +920,10 @@ struct CPU : Thread {
     }
 
     auto pool(u32 address) -> Pool*;
-    auto block(u32 vaddr, u32 address, bool singleInstruction = false) -> Block*;
-    auto fastFetchBlock(u32 address) -> Block*;
+    auto block(u64 vaddr, u32 address, bool singleInstruction = false) -> Block*;
 
-    auto emit(u32 vaddr, u32 address, bool singleInstruction = false) -> Block*;
+    auto emit(u64 vaddr, u32 address, bool singleInstruction = false) -> Block*;
+    auto emitZeroClear(u32 n) -> void;
     auto emitEXECUTE(u32 instruction) -> bool;
     auto emitSPECIAL(u32 instruction) -> bool;
     auto emitREGIMM(u32 instruction) -> bool;
@@ -908,6 +931,7 @@ struct CPU : Thread {
     auto emitFPU(u32 instruction) -> bool;
     auto emitCOP2(u32 instruction) -> bool;
 
+    bool enabled = false;
     bool callInstructionPrologue = false;
     bump_allocator allocator;
     Pool* pools[1 << 21];  //2_MiB * sizeof(void*) == 16_MiB

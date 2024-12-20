@@ -69,6 +69,7 @@ struct Settings : Markup::Node {
     bool runAhead = false;
     bool autoSaveMemory = true;
     bool homebrewMode = false;
+    bool forceInterpreter = false;
   } general;
 
   struct Rewind {
@@ -103,6 +104,10 @@ struct Settings : Markup::Node {
   struct Nintendo64 {
     bool expansionPak = true;
   } nintendo64;
+
+  struct MegaDrive {
+    bool tmss = false;
+  } megadrive;
 };
 
 struct VideoSettings : VerticalLayout {
@@ -250,10 +255,17 @@ struct OptionSettings : VerticalLayout {
     HorizontalLayout homebrewModeLayout{this, Size{~0, 0}, 5};
       CheckLabel homebrewMode{&homebrewModeLayout, Size{0, 0}, 5};
       Label homebrewModeHint{&homebrewModeLayout, Size{~0, 0}};
+    HorizontalLayout forceInterpreterLayout{this, Size{~0, 0}, 5};
+      CheckLabel forceInterpreter{&forceInterpreterLayout, Size{0, 0}, 5};
+      Label forceInterpreterHint{&forceInterpreterLayout, Size{0, 0}};
   Label nintendo64SettingsLabel{this, Size{~0, 0}, 5};
     HorizontalLayout nintendo64ExpansionPakLayout{this, Size{~0, 0}, 5};
       CheckLabel nintendo64ExpansionPakOption{&nintendo64ExpansionPakLayout, Size{0, 0}, 5};
       Label nintendo64ExpansionPakHint{&nintendo64ExpansionPakLayout, Size{0, 0}};
+  Label megaDriveSettingsLabel{this, Size{~0, 0}, 5};
+    HorizontalLayout megaDriveTmssLayout{this, Size{~0, 0}, 5};
+      CheckLabel megaDriveTmssOption{&megaDriveTmssLayout, Size{0, 0}, 5};
+      Label megaDriveTmssHint{&megaDriveTmssLayout, Size{0, 0}};
 };
 
 struct FirmwareSettings : VerticalLayout {

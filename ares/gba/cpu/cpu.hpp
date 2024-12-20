@@ -46,6 +46,9 @@ struct CPU : ARM7TDMI, Thread, IO {
   auto unload() -> void;
 
   auto main() -> void;
+  auto dmaRun() -> void;
+  auto setInterruptFlag(u32 source) -> void;
+  auto stepIRQ() -> void;
   auto step(u32 clocks) -> void override;
   auto power() -> void;
 
@@ -57,7 +60,9 @@ struct CPU : ARM7TDMI, Thread, IO {
 
   //bus.cpp
   auto sleep() -> void override;
+  template<bool UseDebugger> auto getBus(u32 mode, n32 address) -> n32;
   auto get(u32 mode, n32 address) -> n32 override;
+  auto getDebugger(u32 mode, n32 address) -> n32 override;
   auto set(u32 mode, n32 address, n32 word) -> void override;
   auto _wait(u32 mode, n32 address) -> u32;
 
@@ -91,11 +96,6 @@ struct CPU : ARM7TDMI, Thread, IO {
     n32 mask;
   };
 
-  //DMA data bus shared between all DMA channels
-  struct DMABus {
-    n32 data;
-  } dmabus;
-
   struct DMA {
     //dma.cpp
     auto run() -> bool;
@@ -123,12 +123,14 @@ struct CPU : ARM7TDMI, Thread, IO {
       uintVN source;
       uintVN target;
       uintVN length;
+      u32 data;
     } latch;
   } dma[4];
 
   struct Timer {
     //timer.cpp
     auto stepLatch() -> void;
+    auto reloadLatch() -> void;
     auto run() -> void;
     auto step() -> void;
 
@@ -158,7 +160,8 @@ struct CPU : ARM7TDMI, Thread, IO {
     n1  transferEnableReceive;
     n1  transferEnableSend;
     n1  startBit;
-    n1  transferLength;
+    n4  uartFlags;
+    n2  mode;
     n1  irqEnable;
 
     n16 data[4];
@@ -172,6 +175,8 @@ struct CPU : ARM7TDMI, Thread, IO {
     n1 enable;
     n1 condition;
     n1 flag[10];
+
+    n1 conditionMet;
   } keypad;
 
   struct Joybus {
@@ -200,9 +205,10 @@ struct CPU : ARM7TDMI, Thread, IO {
   } joybus;
 
   struct IRQ {
-    n1  ime;
-    n16 enable;
-    n16 flag;
+    n1  ime[2];
+    n1  synchronizer;
+    n16 enable[2];
+    n16 flag[2];
   } irq;
 
   struct Wait {
@@ -221,14 +227,23 @@ struct CPU : ARM7TDMI, Thread, IO {
     n4 unknown2;
   } memory;
 
+  struct OpenBus {
+    auto get(u32 mode, n32 address) -> n32;
+    auto set(u32 mode, n32 address, n32 word) -> void;
+    n32 data;
+    n32 iwramData;
+  } openBus;
+
   struct {
     auto empty() const { return addr == load; }
     auto full() const { return load - addr == 16; }
+    auto size() const { return (load - addr) >> 1; }
 
     n16 slot[8];
     n32 addr;       //read location of slot buffer
     n32 load;       //write location of slot buffer
     i32 wait = 1;  //number of clocks before next slot load
+    n1  stopped = 1;
   } prefetch;
 
   struct Context {
@@ -236,6 +251,8 @@ struct CPU : ARM7TDMI, Thread, IO {
     n1  halted;
     n1  stopped;
     n1  booted;  //set to true by the GBA BIOS
+    n1  dmaRan;
+    n1  dmaRomAccess;
     n1  dmaActive;
     n1  timerLatched;
   } context;

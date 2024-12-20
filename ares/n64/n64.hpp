@@ -20,7 +20,14 @@ using v128 = __m128i;
 #endif
 
 #if defined(VULKAN)
+  #if defined(__clang__)
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wnewline-eof"
+  #endif
   #include <n64/vulkan/vulkan.hpp>
+  #if defined(__clang__)
+    #pragma clang diagnostic pop
+  #endif
 #endif
 
 // Include the GB core, we can use its cartridge emulation for Transfer Pak
@@ -61,7 +68,6 @@ namespace ares::Nintendo64 {
 
   struct Queue : priority_queue<u32[512]> {
     enum : u32 {
-      RSP_DMA,
       PI_DMA_Read,
       PI_DMA_Write,
       PI_BUS_Write,

@@ -39,6 +39,7 @@ namespace ares::Atari2600 {
 #ifdef CORE_GBA
   namespace ares::GameBoyAdvance {
     auto load(Node::System& node, string name) -> bool;
+    auto option(string name, string value) -> bool;
   }
   #include "game-boy-advance.cpp"
 #endif
@@ -46,6 +47,7 @@ namespace ares::Atari2600 {
 #ifdef CORE_MD
   namespace ares::MegaDrive {
     auto load(Node::System& node, string name) -> bool;
+    auto option(string name, string value) -> bool;
   }
   #include "mega-drive.cpp"
   #include "mega-32x.cpp"
@@ -108,6 +110,7 @@ namespace ares::Atari2600 {
 #ifdef CORE_PS1
   namespace ares::PlayStation {
     auto load(Node::System& node, string name) -> bool;
+    auto option(string name, string value) -> bool;
   }
   #include "playstation.cpp"
 #endif
