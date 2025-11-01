@@ -84,7 +84,8 @@ FamilyKeyboard::FamilyKeyboard(Node::Port parent) {
 
 auto FamilyKeyboard::read1() -> n1 {
   n1 data;
-  //data recorder (unsupported)
+  //data recorder (tape)
+  data = tapeDeck.read();
   return data;
 }
 
