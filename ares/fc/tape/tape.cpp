@@ -44,7 +44,7 @@ auto Tape::main() -> void {
     return;
   }
 
-  if (position > length) {
+  if (position >= length) {
     tapeDeck.state.playing = 0;
     tapeDeck.play->setValue(false);
     return;
