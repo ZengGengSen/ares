@@ -24,6 +24,14 @@ System system;
 #include "serialization.cpp"
 
 auto System::game() -> string {
+  if(tapeDeck.tray.tape) {
+    string game = "(no cartridge connected)";
+    if(fds.node) game = fds.title();
+    if(cartridge.node) game = cartridge.title();
+    game.append(" + ", tapeDeck.tray.tape.title());
+    return game;
+  }
+
   if(fds.node) {
     return fds.title();
   }
@@ -82,6 +90,7 @@ auto System::load(Node::System& root, string name) -> bool {
   controllerPort1.load(node);
   controllerPort2.load(node);
   expansionPort.load(node);
+  tapeDeck.load(node);
   return true;
 }
 
@@ -101,6 +110,7 @@ auto System::unload() -> void {
   controllerPort1.unload();
   controllerPort2.unload();
   expansionPort.unload();
+  tapeDeck.unload();
   node = {};
 }
 
@@ -113,6 +123,7 @@ auto System::power(bool reset) -> void {
   cartridge.power();
   cpu.power(reset);
   ppu.power(reset);
+  tapeDeck.power();
   scheduler.power(cpu);
 }
 

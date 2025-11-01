@@ -24,6 +24,7 @@ namespace ares::Famicom {
 
   #include <fc/controller/controller.hpp>
   #include <fc/expansion/expansion.hpp>
+  #include <fc/tape/tape.hpp>
   #include <fc/system/system.hpp>
   #include <fc/cartridge/cartridge.hpp>
   #include <fc/cpu/cpu.hpp>

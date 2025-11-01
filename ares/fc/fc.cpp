@@ -3,6 +3,7 @@
 #include <fc/system/system.cpp>
 #include <fc/controller/controller.cpp>
 #include <fc/expansion/expansion.cpp>
+#include <fc/tape/tape.cpp>
 #include <fc/cartridge/cartridge.cpp>
 #include <fc/cpu/cpu.cpp>
 #include <fc/apu/apu.cpp>
