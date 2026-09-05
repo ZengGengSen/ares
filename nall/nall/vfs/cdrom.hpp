@@ -16,6 +16,7 @@ namespace nall::vfs {
 
 struct cdrom : file {
   ~cdrom() {
+    _stopLoading = true;
     _thread.join();
   }
 
@@ -290,6 +291,9 @@ private:
     for(auto& track : chd->tracks) {
       for(auto& index : track.indices) {
         for(s32 sector : range(index.sectorCount())) {
+          // Identification releases temporary images before their preload completes.
+          // Stop between sectors; join keeps decoder and image storage alive until exit.
+          if(_stopLoading) return;
           auto lba = index.lba + sector;
           auto offset = 2448ull * (CD::LeadInSectors + (u64)CD::LBAtoABA(lba));
           auto target = _image.data() + offset;
@@ -359,6 +363,7 @@ private:
   std::vector<u8> _image;
   u64 _offset = 0;
   atomic<u64> _loadOffset = 0;
+  atomic<bool> _stopLoading = false;
   thread _thread;
   std::unique_ptr<Decode::ZIP> _archive;
 };
