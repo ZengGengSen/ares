@@ -113,7 +113,6 @@ auto MemoryControl::writeWord(u32 address, u32 value) -> void {
     cache.noStreaming       = data.bit(17);  //should be 0
     cache.reserved          = data.bit(18,31);
 
-    cpu.icache.enable(cache.codeEnable);
     return;
   }
 

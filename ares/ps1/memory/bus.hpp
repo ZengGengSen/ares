@@ -45,8 +45,6 @@ auto Bus::calcAccessTime(u32 address, u32 bytesCount) -> u32 const {
   address &= 0x1fff'ffff;
   u32 words = (bytesCount > 0) ? ((bytesCount + 3) / 4) : 1;
 
-  if(!isDMA && cpu.active()) cpu.waitDMA();
-
   if(auto access = memory.decodeRAM(address); access.type == MemoryControl::RAMAccess::Mapped) {
     if constexpr(isDMA) {
       // Hyper-Page DMA mode for DRAM: ~1 cycle per 32-bit word
