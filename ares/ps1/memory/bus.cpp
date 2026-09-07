@@ -5,6 +5,8 @@ auto Bus::acquire(u8 owner) -> bool {
     if(owner < DMA0 && arbiter.owner >= DMA0) arbiter.cpuPending |= 1 << owner;
     return false;
   }
+  if(owner >= DMA0 && arbiter.cpuHandoff && arbiter.cpuPending
+  && (dma.cpuControl & 7) <= dma.channels[owner - DMA0].priority) return false;
   if(owner < DMA0) {
     arbiter.cpuPending &= ~(1 << owner);
     arbiter.cpuHandoff = false;
