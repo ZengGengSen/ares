@@ -18,6 +18,16 @@ auto load(Node::System& node, string name) -> bool {
 }
 
 auto option(string name, string value) -> bool {
+  if(name == "CD-ROM Controller Version") return disc.setControllerVersion(value);
+  if(name == "CD-ROM Lid") {
+    if(value == "Automatic") {
+      disc.setLidOpen(disc.noDisc(), false);
+      return true;
+    }
+    if(value != "Open" && value != "Closed") return false;
+    disc.setLidOpen(value == "Open");
+    return true;
+  }
   if(name == "Homebrew Mode") system.homebrewMode = value.boolean();
   return true;
 }
