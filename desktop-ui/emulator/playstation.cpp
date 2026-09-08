@@ -2,11 +2,13 @@ struct PlayStation : Emulator {
   PlayStation();
   auto load() -> LoadResult override;
   auto load(Menu) -> void override;
+  auto unload() -> void override;
   auto save() -> bool override;
   auto pak(ares::Node::Object) -> std::shared_ptr<vfs::directory> override;
 
   std::shared_ptr<mia::Pak> memoryCard;
   u32 regionID = 0;
+  sTimer lidMenuTimer;
 };
 
 PlayStation::PlayStation() {
@@ -132,6 +134,34 @@ auto PlayStation::load() -> LoadResult {
 }
 
 auto PlayStation::load(Menu menu) -> void {
+  lidMenuTimer.reset();
+  if(auto lid = root->find<ares::Node::Setting::String>("PlayStation/CD-ROM Lid")) {
+    Menu lidMenu{&menu};
+    lidMenu.setText(lid->name()).setIcon(Icon::Device::Optical);
+    Group lidGroup;
+    for(auto mode : lid->readAllowedValues()) {
+      MenuRadioItem item{&lidMenu};
+      item.setText(mode).onActivate([lid, mode] {
+        Program::Guard guard;
+        lid->setValue(mode);
+      });
+      lidGroup.append(item);
+    }
+
+    auto refreshLid = [this, lid, items = lidGroup.objects<MenuRadioItem>()] {
+      Program::Guard guard;
+      if(!root) return;
+      auto mode = lid->value();
+      for(auto item : items) {
+        if(item.text() == mode && !item.checked()) item.setChecked();
+      }
+    };
+    refreshLid();
+    // Only refresh GUI checkmarks after state loads/rewind; the core owns all lid timing.
+    lidMenuTimer = Timer{};
+    lidMenuTimer->onActivate(refreshLid).setInterval(100).setEnabled();
+  }
+
   MenuItem changeDisc{&menu};
   changeDisc.setIcon(Icon::Device::Optical);
   changeDisc.setText("Change Disc").onActivate([&] {
@@ -148,6 +178,11 @@ auto PlayStation::load(Menu menu) -> void {
     tray->allocate();
     tray->connect();
   });
+}
+
+auto PlayStation::unload() -> void {
+  lidMenuTimer.reset();
+  Emulator::unload();
 }
 
 auto PlayStation::save() -> bool {

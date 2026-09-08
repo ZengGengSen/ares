@@ -16,6 +16,20 @@ Disc disc;
 auto Disc::load(Node::Object parent) -> void {
   node = parent->append<Node::Object>("PlayStation");
 
+  lidOpen = false;
+  manualLidControl = false;
+  lidSetting = node->append<Node::Setting::String>("CD-ROM Lid", "Automatic", [&](auto value) {
+    // Restored state also updates the setting; only a different mode is a new user command.
+    if(value == "Automatic") {
+      if(manualLidControl) setLidOpen(noDisc(), false);
+    } else {
+      bool open = value == "Open";
+      if(!manualLidControl || lidOpen != open) setLidOpen(open);
+    }
+  });
+  lidSetting->setAllowedValues({"Automatic", "Open", "Closed"});
+  lidSetting->setDynamic(true);
+
   tray = node->append<Node::Port>("Disc Tray");
   tray->setFamily("PlayStation");
   tray->setType("Compact Disc");
@@ -42,6 +56,7 @@ auto Disc::unload() -> void {
   cdxa.unload(node);
 
   disconnect(false);
+  lidSetting.reset();
   tray.reset();
   node.reset();
 }
@@ -126,6 +141,11 @@ auto Disc::setLidOpen(bool open, bool manual) -> void {
     // Closing starts the spindle; Nop separately acknowledges the sticky shell-open bit.
     drive.spinUp = system.frequency();
   }
+  synchronizeLidSetting();
+}
+
+auto Disc::synchronizeLidSetting() -> void {
+  if(lidSetting) lidSetting->setValue(!manualLidControl ? "Automatic" : lidOpen ? "Open" : "Closed");
 }
 
 auto Disc::main() -> void {

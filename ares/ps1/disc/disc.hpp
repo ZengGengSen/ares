@@ -1,6 +1,7 @@
 struct Disc : Memory::Interface {
   Node::Object node;
   Node::Port tray;
+  Node::Setting::String lidSetting;
   Node::Peripheral cd;
   VFS::Pak pak;
   VFS::File fd;
@@ -45,6 +46,7 @@ struct Disc : Memory::Interface {
   bool lidOpen = false;  // Physical input, independent of the sticky shell-open status bit.
   bool manualLidControl = false;
   auto setLidOpen(bool open, bool manual = true) -> void;
+  auto synchronizeLidSetting() -> void;
   auto invalidateMedia(bool forSwap = false) -> void;
   auto discRegionSuffix() const -> u8;
   auto discRegionMatches() const -> bool;

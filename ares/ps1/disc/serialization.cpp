@@ -123,4 +123,5 @@ auto Disc::serialize(serializer& s) -> void {
   s(counter.sector);
   s(counter.audio);
   s(clockAccumulator);
+  if(s.reading()) synchronizeLidSetting();
 }
